@@ -1,0 +1,19 @@
+{
+  "name": "pilotage-br27",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Plateforme de pilotage BR2027 — miroir web statique chiffré d'une base Notion (lecture seule, protégé par mot de passe).",
+  "scripts": {
+    "build": "node scripts/generate.mjs",
+    "build:fixture": "node scripts/generate.mjs --fixture",
+    "serve": "node scripts/serve.mjs",
+    "test:crypto": "node scripts/crypto.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.22.0"
+  }
+}
