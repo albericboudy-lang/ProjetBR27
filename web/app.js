@@ -9,6 +9,11 @@ const STATES = ['GT lancé', 'Travail en cours', 'Validation BR', 'Finalisation'
 const PILIERS = ['Prospérité', 'Ordre', 'Fierté'];
 const PRIORITES = ['Haute', 'Moyenne', 'Basse'];
 const STATE_VAR = { 'GT lancé': '--s-gt', 'Travail en cours': '--s-cours', 'Validation BR': '--s-valid', 'Finalisation': '--s-final', 'Prêt': '--s-pret', 'Annoncé': '--s-annonce' };
+// Libellé d'affichage : « Annoncé » s'affiche « Lancé » (la valeur Notion reste « Annoncé »).
+const ETAT_LABEL = { 'Annoncé': 'Lancé' };
+const etatLabel = (e) => ETAT_LABEL[e] || e || 'Non classé';
+// Ordre d'affichage : du plus avancé au moins avancé (Lancé en tête).
+const STATES_DISPLAY = ['Annoncé', 'Prêt', 'Finalisation', 'Validation BR', 'Travail en cours', 'GT lancé'];
 const PILIER_VAR = { 'Prospérité': '--p-prosperite', 'Ordre': '--p-ordre', 'Fierté': '--p-fierte' };
 const PRIORITE_VAR = { 'Haute': '--urgent', 'Moyenne': '--soon', 'Basse': '--s-gt' };
 const IV_BYTES = 12;
@@ -18,7 +23,7 @@ const state = {
   manifest: null, key: null, pw: null, data: null,
   filters: { etats: new Set(), piliers: new Set(), priorites: new Set() },
   query: '',
-  sort: { key: 'etat', dir: 1 }, // tri de la liste (état, par défaut)
+  sort: { key: 'etat', dir: -1 }, // tri par défaut : du plus avancé (Lancé) au moins avancé
   lastFocus: null, // élément ayant ouvert le slide-over
 };
 
@@ -113,7 +118,7 @@ function enterApp() {
   gate.hidden = true; gate.style.display = 'none';
   app.hidden = false;
   renderUpdated();
-  renderSynthese();
+  renderKpis();
   renderFilters();
   render();
   $('#search').addEventListener('input', (e) => { state.query = e.target.value.trim(); render(); });
@@ -131,35 +136,30 @@ function renderUpdated() {
   if (foot) foot.textContent = label + demo;
 }
 
-/* ---------- Rendu : synthèse ---------- */
+/* ---------- Rendu : indicateurs (KPI) ---------- */
 function countsByState() {
   const c = Object.fromEntries(STATES.map((s) => [s, 0]));
   for (const ch of state.data.chantiers) if (c[ch.etat] != null) c[ch.etat]++;
   return c;
 }
-function renderSynthese() {
+function renderKpis() {
   const counts = countsByState();
   const total = state.data.chantiers.length;
-  $('#total').innerHTML = `<b>${total}</b> chantier${total > 1 ? 's' : ''}`;
+  const wrap = $('#kpis'); wrap.innerHTML = '';
 
-  const bar = $('#dist-bar'); bar.innerHTML = '';
-  const sum = STATES.reduce((a, s) => a + counts[s], 0);
-  if (sum === 0) { const e = el('span', 'distseg', { 'data-empty': '' }); bar.append(e); }
-  else STATES.forEach((s) => {
-    if (!counts[s]) return;
-    const seg = el('span', 'distseg', { title: `${s} : ${counts[s]}` });
-    setCssVar(seg, STATE_VAR[s]); seg.style.background = `var(${STATE_VAR[s]})`;
-    seg.style.flex = String(counts[s]); bar.append(seg);
-  });
-  bar.setAttribute('aria-label', 'Répartition : ' + STATES.map((s) => `${counts[s]} ${s}`).join(', '));
+  // Total — non filtrant (clic = tout afficher)
+  const t = el('button', 'kpi kpi--total', { type: 'button', title: 'Tous les chantiers' });
+  t.innerHTML = `<span class="kpi__n">${total}</span><span class="kpi__label">Chantiers</span>`;
+  t.addEventListener('click', () => { state.filters.etats.clear(); syncFilterControls(); render(); });
+  wrap.append(t);
 
-  const wrap = $('#counters'); wrap.innerHTML = '';
-  STATES.forEach((s) => {
-    const c = el('button', 'counter', { type: 'button', 'aria-pressed': state.filters.etats.has(s) ? 'true' : 'false' });
-    setCssVar(c, STATE_VAR[s]);
-    c.innerHTML = `<span class="counter__dot"></span><span class="counter__label">${s}</span><span class="counter__n">${counts[s]}</span>`;
-    c.addEventListener('click', () => toggleFilter('etats', s));
-    wrap.append(c);
+  // Un indicateur par état (du plus avancé au moins avancé), cliquable = filtre
+  STATES_DISPLAY.forEach((s) => {
+    const k = el('button', 'kpi', { type: 'button', 'data-etat': s, 'aria-pressed': state.filters.etats.has(s) ? 'true' : 'false' });
+    setCssVar(k, STATE_VAR[s]);
+    k.innerHTML = `<span class="kpi__n">${counts[s]}</span><span class="kpi__label"><span class="kpi__dot"></span>${etatLabel(s)}</span>`;
+    k.addEventListener('click', () => toggleFilter('etats', s));
+    wrap.append(k);
   });
 }
 
@@ -193,7 +193,7 @@ function clearFilters() {
   syncFilterControls(); render();
 }
 function syncFilterControls() {
-  $('#counters').querySelectorAll('.counter').forEach((c, i) => c.setAttribute('aria-pressed', state.filters.etats.has(STATES[i]) ? 'true' : 'false'));
+  $('#kpis').querySelectorAll('.kpi[data-etat]').forEach((k) => k.setAttribute('aria-pressed', state.filters.etats.has(k.dataset.etat) ? 'true' : 'false'));
   $('#filter-groups').querySelectorAll('.fgroup').forEach((g) => {
     const dim = g.querySelector('.fgroup__label').textContent === 'Pilier' ? 'piliers' : 'priorites';
     g.querySelectorAll('.chip').forEach((chip) => {
@@ -205,16 +205,17 @@ function syncFilterControls() {
 }
 function renderActiveChips() {
   const wrap = $('#active-chips'); wrap.innerHTML = '';
-  const add = (dim, value, varName) => {
+  const add = (dim, value, varName, labelText) => {
+    const lbl = labelText || value;
     const a = el('span', 'achip');
     if (varName) { setCssVar(a, varName); a.style.borderColor = `color-mix(in srgb, var(${varName}) 36%, transparent)`; a.style.background = `color-mix(in srgb, var(${varName}) 12%, var(--surface))`; }
-    a.innerHTML = `<span>${value}</span>`;
-    const x = el('button', null, { type: 'button', 'aria-label': `Retirer le filtre ${value}` });
+    a.innerHTML = `<span>${lbl}</span>`;
+    const x = el('button', null, { type: 'button', 'aria-label': `Retirer le filtre ${lbl}` });
     x.innerHTML = icon('x');
     x.addEventListener('click', () => toggleFilter(dim, value));
     a.append(x); wrap.append(a);
   };
-  state.filters.etats.forEach((v) => add('etats', v, STATE_VAR[v]));
+  state.filters.etats.forEach((v) => add('etats', v, STATE_VAR[v], etatLabel(v)));
   state.filters.piliers.forEach((v) => add('piliers', v, PILIER_VAR[v]));
   state.filters.priorites.forEach((v) => add('priorites', v, PRIORITE_VAR[v]));
   const any = state.filters.etats.size || state.filters.piliers.size || state.filters.priorites.size || state.query;
@@ -257,25 +258,20 @@ function railHTML(etat) {
 }
 
 /* ---------- Tri ---------- */
-const stIdx = (e) => { const i = STATES.indexOf(e); return i < 0 ? 99 : i; };
-const prIdx = (p) => { const i = PRIORITES.indexOf(p); return i < 0 ? 99 : i; };
+const stIdx = (e) => { const i = STATES.indexOf(e); return i < 0 ? -1 : i; }; // GT lancé=0 … Annoncé=5
 const byStr = (a, b) => (a || '').localeCompare(b || '', 'fr', { sensitivity: 'base' });
 const SORTS = {
   chantier: (a, b) => byStr(a.chantier, b.chantier),
-  etat: (a, b) => (stIdx(a.etat) - stIdx(b.etat)) || (prIdx(a.priorite) - prIdx(b.priorite)) || byStr(a.chantier, b.chantier),
-  priorite: (a, b) => (prIdx(a.priorite) - prIdx(b.priorite)) || (stIdx(a.etat) - stIdx(b.etat)) || byStr(a.chantier, b.chantier),
-  pilote: (a, b) => byStr(a.pilote, b.pilote) || byStr(a.chantier, b.chantier),
-  echeance: (a, b) => byStr(a.echeance || '9999-99-99', b.echeance || '9999-99-99'),
+  etat: (a, b) => (stIdx(a.etat) - stIdx(b.etat)) || byStr(a.chantier, b.chantier),
 };
+// Colonnes calquées sur le tableau Notion (les colonnes documents sont séparées).
 const COLUMNS = [
   { key: 'chantier', label: 'Chantier', sortable: true },
   { key: 'etat', label: 'Avancement', sortable: true },
-  { key: 'priorite', label: 'Priorité', sortable: true },
-  { key: 'pilote', label: 'Pilote', sortable: true },
-  { key: 'echeance', label: 'Échéance', sortable: true },
-  { key: 'documents', label: 'Documents', sortable: false },
+  { key: 'livret', label: 'Livret', sortable: false, doc: 'livret' },
+  { key: 'tract', label: 'Tract', sortable: false, doc: 'tract' },
+  { key: 'autres', label: 'Autres', sortable: false, doc: 'autres' },
 ];
-const DOC_SHORT = { Livret: 'Livret', Tract: 'Tract', Autre: 'Document' };
 
 /* ---------- Rendu : liste ---------- */
 function render() {
@@ -324,44 +320,37 @@ function render() {
   announce(visible.length);
 }
 function sortBy(key) {
-  if (state.sort.key === key) state.sort.dir *= -1; else { state.sort.key = key; state.sort.dir = 1; }
+  if (state.sort.key === key) state.sort.dir *= -1;
+  else { state.sort.key = key; state.sort.dir = key === 'etat' ? -1 : 1; } // l'avancement démarre du plus avancé
   render();
 }
 
-function docButtonsHTML(ch) {
-  const groups = [['Livret', ch.documents?.livret], ['Tract', ch.documents?.tract], ['Autre', ch.documents?.autres]];
-  const all = groups.flatMap(([label, arr]) => (arr || []).map((d) => ({ ...d, label })));
-  if (!all.length) return '<span class="lmuted">—</span>';
-  return `<div class="docchips">${all.map((d) => `<button class="docchip" type="button" data-id="${d.id}" data-name="${escapeHtml(d.name)}" data-mime="${d.mime}" aria-label="Télécharger ${escapeHtml(d.name)}" title="Télécharger ${escapeHtml(d.name)}">${icon('download', 'ic ic--xs')}<span>${DOC_SHORT[d.label]}</span></button>`).join('')}</div>`;
+function docCellHTML(files) {
+  if (!files || !files.length) return '<span class="lmuted">—</span>';
+  return `<div class="docchips">${files.map((d) => `<button class="docchip" type="button" data-id="${d.id}" data-name="${escapeHtml(d.name)}" data-mime="${d.mime}" aria-label="Télécharger ${escapeHtml(d.name)}" title="Télécharger ${escapeHtml(d.name)}">${icon('download', 'ic ic--sm')}<span>Télécharger</span></button>`).join('')}</div>`;
 }
 function rowEl(ch) {
   const row = el('div', 'lrow', { role: 'row' });
-  const ecl = echeanceClass(ch);
   const sv = STATE_VAR[ch.etat] || '--ink-3';
 
   const c1 = el('div', 'lcell lcell--chantier', { role: 'cell' });
-  const aria = `Ouvrir ${ch.chantier}${ch.ref ? ', ' + ch.ref : ''} — état ${ch.etat || 'non classé'}${ch.pilote ? ', piloté par ' + ch.pilote : ''}${ch.echeance ? ', échéance ' + fmtDate(ch.echeance) : ''}`;
+  const aria = `Ouvrir ${ch.chantier}${ch.ref ? ', ' + ch.ref : ''} — ${etatLabel(ch.etat)}`;
   const btn = el('button', 'lrow__open', { type: 'button', 'aria-label': aria });
   btn.innerHTML = `<span class="lrow__title">${escapeHtml(ch.chantier)}</span><span class="lrow__sub">${ch.pilier ? `<span class="pastille" style="--c:var(${PILIER_VAR[ch.pilier]})">${ch.pilier}</span>` : ''}${ch.ref ? `<span class="lrow__ref">${ch.ref}</span>` : ''}</span>`;
   c1.append(btn);
 
   const c2 = el('div', 'lcell lcell--etat', { role: 'cell', 'data-label': 'Avancement' });
-  c2.innerHTML = `<span class="etatpill" style="--c:var(${sv})"><span class="etatpill__dot"></span>${ch.etat || 'Non classé'}</span><span class="rail" style="--c:var(${sv})" aria-hidden="true">${railHTML(ch.etat)}</span>`;
+  c2.innerHTML = `<span class="etatpill" style="--c:var(${sv})"><span class="etatpill__dot"></span>${etatLabel(ch.etat)}</span><span class="rail" style="--c:var(${sv})" aria-hidden="true">${railHTML(ch.etat)}</span>`;
 
-  const c3 = el('div', 'lcell lcell--priorite', { role: 'cell', 'data-label': 'Priorité' });
-  c3.innerHTML = ch.priorite ? `<span class="prio" style="--c:var(${PRIORITE_VAR[ch.priorite] || '--ink-3'})"><span class="prio__dot"></span>${ch.priorite}</span>` : '<span class="lmuted">—</span>';
-
-  const c4 = el('div', 'lcell lcell--pilote', { role: 'cell', 'data-label': 'Pilote' });
-  c4.innerHTML = ch.pilote ? escapeHtml(ch.pilote) : '<span class="lmuted">—</span>';
-
-  const c5 = el('div', 'lcell lcell--echeance', { role: 'cell', 'data-label': 'Échéance' });
-  c5.innerHTML = ch.echeance ? `<span class="ech ${ecl}">${ecl ? icon('alert', 'ic ic--xs') : ''}<span>${fmtDate(ch.echeance)}${ecl === 'is-urgent' ? ' · en retard' : ecl === 'is-soon' ? ' · bientôt' : ''}</span></span>` : '<span class="lmuted">—</span>';
-
-  const c6 = el('div', 'lcell lcell--documents', { role: 'cell', 'data-label': 'Documents' });
-  c6.innerHTML = docButtonsHTML(ch);
-  c6.querySelectorAll('.docchip').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); downloadDoc(b); }));
-
-  row.append(c1, c2, c3, c4, c5, c6);
+  const cells = [c1, c2];
+  for (const col of COLUMNS) {
+    if (!col.doc) continue;
+    const cell = el('div', `lcell lcell--doc lcell--${col.key}`, { role: 'cell', 'data-label': col.label });
+    cell.innerHTML = docCellHTML(ch.documents?.[col.doc]);
+    cell.querySelectorAll('.docchip').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); downloadDoc(b); }));
+    cells.push(cell);
+  }
+  row.append(...cells);
   row.addEventListener('click', (e) => { if (e.target.closest('.docchip')) return; openDetail(ch, btn); });
   return row;
 }
@@ -391,7 +380,7 @@ function openDetail(ch, trigger) {
     </div>
     <div class="detail__body">
       <div>
-        <div class="dsection__label">État d’avancement — ${ch.etat || 'non classé'}</div>
+        <div class="dsection__label">État d’avancement — ${etatLabel(ch.etat)}</div>
         <div class="rail detail__rail" style="--c:var(${STATE_VAR[ch.etat] || '--ink-3'})" aria-hidden="true">${railHTML(ch.etat)}</div>
       </div>
       <dl class="dgrid">
@@ -481,7 +470,7 @@ $('#refresh').addEventListener('click', async (e) => {
     state.manifest = await res.json();
     state.key = await deriveKey(state.pw, b64ToBytes(state.manifest.salt), state.manifest.kdf.iterations);
     await loadData();
-    renderUpdated(); renderSynthese(); syncFilterControls(); render();
+    renderUpdated(); renderKpis(); syncFilterControls(); render();
   } catch (err) { /* on garde l'affichage courant */ }
   finally { btn.classList.remove('is-spinning'); btn.disabled = false; }
 });
