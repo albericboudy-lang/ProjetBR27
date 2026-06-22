@@ -158,14 +158,12 @@ function enterApp() {
   app.hidden = false;
   restoreUi();           // tri/vue/filtres mémorisés (session)
   renderUpdated();
-  renderCockpit();
   renderKpis();
   renderFilters();
   render();
   $('#search').addEventListener('input', (e) => { state.query = e.target.value.trim(); render(); persistUi(); });
   // Séquence d'ouverture (générique d'état-major) — uniquement après que les données sont prêtes.
   app.classList.add('is-entering');
-  animateRing();
   setTimeout(() => app.classList.remove('is-entering'), 1100);
 }
 
@@ -187,67 +185,8 @@ function countsByState() {
   for (const ch of state.data.chantiers) if (c[ch.etat] != null) c[ch.etat]++;
   return c;
 }
-/* Avancement global : moyenne de la position d'état (aucun champ Notion — calcul honnête). */
-function avgProgress() {
-  const L = getStates().length;
-  const known = state.data.chantiers.filter((c) => stIdx(c.etat) >= 0);
-  if (!known.length || L < 2) return 0;
-  return Math.round(known.reduce((s, c) => s + stIdx(c.etat), 0) / ((L - 1) * known.length) * 100);
-}
-function ringSVG(pct) {
-  const r = 34, C = 2 * Math.PI * r, off = C * (1 - pct / 100);
-  return `<svg class="ring" viewBox="0 0 80 80" aria-hidden="true">
-    <circle class="ring__track" cx="40" cy="40" r="${r}"/>
-    <circle class="ring__val" cx="40" cy="40" r="${r}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" data-off="${off.toFixed(1)}" data-c="${C.toFixed(1)}"/>
-  </svg>`;
-}
 function livretKey() {
   return (state.data.docColumns || []).find((c) => /livret/i.test(c.key) || /livret/i.test(c.label))?.key || null;
-}
-function renderCockpit() {
-  const wrap = $('#cockpit'); if (!wrap) return;
-  const ch = state.data.chantiers, states = getStates();
-  const pct = avgProgress();
-  const pretLabel = states.find((s) => /^pr[eê]ts?$/i.test(s)) || '';
-  const enCoursLabel = states.find((s) => /travail en cours/i.test(s)) || '';
-  const prets = pretLabel ? ch.filter((c) => c.etat === pretLabel).length : 0;
-  const relancer = enCoursLabel ? ch.filter((c) => c.etat === enCoursLabel && docCount(c) === 0).length : 0;
-  const lk = livretKey();
-  const livrets = lk ? ch.filter((c) => (c.documents?.[lk]?.length || 0) > 0).length : 0;
-
-  const stat = (n, label, varName, etat) => {
-    const tag = etat ? 'button' : 'div';
-    const a = etat ? ` type="button" data-etat="${escapeHtml(etat)}" aria-label="${label} : ${n}. Filtrer."` : '';
-    return `<${tag} class="cstat" style="--c:var(${varName})"${a}><span class="cstat__n">${n}</span><span class="cstat__label"><span class="cstat__dot"></span>${label}</span></${tag}>`;
-  };
-
-  wrap.innerHTML = `
-    <div class="cock-hero">
-      <span class="cock-hero__flag" aria-hidden="true"></span>
-      <div class="cock-hero__gauge">
-        ${ringSVG(pct)}
-        <div class="cock-hero__pct"><b>${pct}</b><span>%</span></div>
-      </div>
-      <div class="cock-hero__meta">
-        <span class="cock-hero__eyebrow">Pour la France</span>
-        <span class="cock-hero__label">Avancement du projet</span>
-        <span class="cock-hero__sub">${ch.length} chantier${ch.length > 1 ? 's' : ''} · horizon 2027</span>
-      </div>
-    </div>
-    <div class="cock-stats">
-      ${stat(prets, 'Prêts à sortir', '--s-pret', pretLabel)}
-      ${stat(relancer, 'À relancer', '--soon', '')}
-      ${stat(livrets, livrets > 1 ? 'Livrets disponibles' : 'Livret disponible', '--accent', '')}
-    </div>`;
-
-  const pb = wrap.querySelector('[data-etat]');
-  if (pb) pb.addEventListener('click', () => { state.filters.etats = new Set([pb.dataset.etat]); state.filters.piliers.clear(); syncFilterControls(); render(); });
-}
-function animateRing() {
-  const v = $('#cockpit .ring__val'); if (!v) return;
-  v.style.strokeDashoffset = v.dataset.c;     // vide
-  void v.getBoundingClientRect();             // reflow → déclenche la transition
-  v.style.strokeDashoffset = v.dataset.off;   // remplissage
 }
 
 function renderKpis() {
@@ -692,7 +631,7 @@ $('#refresh').addEventListener('click', async (e) => {
     state.manifest = await res.json();
     state.key = await deriveKey(state.pw, b64ToBytes(state.manifest.salt), state.manifest.kdf.iterations);
     await loadData();
-    renderUpdated(); renderCockpit(); renderKpis(); renderFilters(); syncFilterControls(); render();
+    renderUpdated(); renderKpis(); renderFilters(); syncFilterControls(); render();
   } catch (err) { showDataBanner(); }
   finally { btn.classList.remove('is-spinning'); btn.disabled = false; }
 });
