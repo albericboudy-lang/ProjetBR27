@@ -211,7 +211,7 @@ a{color:inherit; text-decoration:none}
 /* --- Liste des chantiers (vue principale) --- */
 .board{flex:1;padding:var(--s5)}
 .board.is-empty{padding:0;display:block}
-.list{--lcols:minmax(260px,2.6fr) minmax(190px,1.5fr) minmax(150px,1fr);
+.list{--lcols:minmax(230px,2.4fr) minmax(180px,1.4fr) 120px minmax(140px,1fr);
   display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:var(--r3);overflow:hidden;box-shadow:var(--sh1)}
 .list__head{display:grid;grid-template-columns:var(--lcols);gap:var(--s4);align-items:center;
   padding:var(--s4);background:var(--surface-2);border-bottom:1px solid var(--border)}
@@ -228,6 +228,7 @@ button.lh:hover{color:var(--ink-2)}
 .lrow:hover{background:var(--surface-2)}
 .lcell{min-width:0;font-size:var(--fs-body);color:var(--ink-2)}
 .lmuted{color:var(--ink-3)}
+.ldate{font-variant-numeric:tabular-nums;color:var(--ink-2);white-space:nowrap}
 .lrow__open{display:flex;flex-direction:column;gap:3px;align-items:flex-start;width:100%;min-width:0;
   background:none;border:0;padding:0;text-align:left;cursor:pointer;font:inherit}
 .lrow__title{font-family:"Spectral",Georgia,serif;font-weight:600;font-size:var(--fs-card);color:var(--ink);line-height:1.2}
@@ -437,6 +438,9 @@ button.lh:hover{color:var(--ink-2)}
 .pcard__open:focus-visible{box-shadow:none}
 .pcard__open:focus-visible::after{box-shadow:var(--ring)}
 .pcard__title{font-family:"Spectral",Georgia,serif;font-weight:600;font-size:var(--fs-card);color:var(--ink);line-height:1.2}
+.pcard__meta{display:flex;align-items:center;gap:var(--s2) var(--s3);flex-wrap:wrap}
+.pcard__date{display:inline-flex;align-items:center;gap:5px;font-size:var(--fs-caption);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pcard__date .ic{color:var(--ink-3)}
 .pcard .rail{margin-top:0}
 .pcard__docs{position:relative;z-index:1;margin-top:2px}
 

@@ -301,12 +301,14 @@ const byStr = (a, b) => (a || '').localeCompare(b || '', 'fr', { sensitivity: 'b
 const SORTS = {
   chantier: (a, b) => byStr(a.chantier, b.chantier),
   etat: (a, b) => (stIdx(a.etat) - stIdx(b.etat)) || byStr(a.chantier, b.chantier),
+  lancement: (a, b) => byStr(a.dateAnnonce || '0000', b.dateAnnonce || '0000') || byStr(a.chantier, b.chantier),
 };
-// Colonnes : Chantier + Avancement + une colonne Documents (bouton → fenêtre).
+// Colonnes : Chantier + Avancement + Lancement (date d'annonce) + Documents.
 function buildColumns() {
   return [
     { key: 'chantier', label: 'Chantier', sortable: true },
     { key: 'etat', label: 'Avancement', sortable: true },
+    { key: 'lancement', label: 'Lancement', sortable: true },
     { key: 'documents', label: 'Documents', sortable: false },
   ];
 }
@@ -368,7 +370,7 @@ function render() {
 }
 function sortBy(key) {
   if (state.sort.key === key) state.sort.dir *= -1;
-  else { state.sort.key = key; state.sort.dir = key === 'etat' ? -1 : 1; }
+  else { state.sort.key = key; state.sort.dir = (key === 'etat' || key === 'lancement') ? -1 : 1; } // avancement/lancement : plus récent d'abord
   persistUi(); render();
 }
 function setView(v) { if (state.view === v) return; state.view = v; persistUi(); syncViewToggle(); render(); }
@@ -404,9 +406,11 @@ function rowEl(ch) {
   c1.append(btn);
   const c2 = el('div', 'lcell lcell--etat', { role: 'cell', 'data-label': 'Avancement' });
   c2.innerHTML = `<span class="etatpill" style="--c:var(${sv})"><span class="etatpill__dot"></span>${etatLabel(ch.etat)}</span><span class="rail" style="--c:var(${sv})" aria-hidden="true">${railHTML(ch.etat)}</span>`;
+  const cL = el('div', 'lcell lcell--lancement', { role: 'cell', 'data-label': 'Lancement' });
+  cL.innerHTML = ch.dateAnnonce ? `<span class="ldate">${fmtDate(ch.dateAnnonce)}</span>` : '<span class="lmuted">—</span>';
   const c3 = el('div', 'lcell lcell--documents', { role: 'cell', 'data-label': 'Documents' });
   c3.innerHTML = docsAffordanceHTML(ch); wireDocsAff(c3, ch);
-  row.append(c1, c2, c3);
+  row.append(c1, c2, cL, c3);
   row.addEventListener('click', (e) => { if (e.target.closest('button')) return; openDetail(ch, btn); });
   return row;
 }
@@ -428,7 +432,8 @@ function chantierCard(ch) {
   btn.innerHTML = `<span class="pcard__title">${escapeHtml(ch.chantier)}</span>`;
   card.append(btn);
   const meta = el('div', 'pcard__meta');
-  meta.innerHTML = `<span class="etatpill" style="--c:var(${sv})"><span class="etatpill__dot"></span>${etatLabel(ch.etat)}</span>`;
+  meta.innerHTML = `<span class="etatpill" style="--c:var(${sv})"><span class="etatpill__dot"></span>${etatLabel(ch.etat)}</span>`
+    + (ch.dateAnnonce ? `<span class="pcard__date" title="Date de lancement">${icon('megaphone', 'ic ic--xs')}<span>${fmtDate(ch.dateAnnonce)}</span></span>` : '');
   card.append(meta);
   const rail = el('div', 'rail', { 'aria-hidden': 'true' }); setCssVar(rail, sv); rail.innerHTML = railHTML(ch.etat);
   card.append(rail);
